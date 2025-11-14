@@ -10,7 +10,6 @@ import pinecone
 import tensorflow as tf
 import tensorflow_hub as hub
 from PIL import Image, UnidentifiedImageError
-import tf_keras
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from io import BytesIO
@@ -29,9 +28,18 @@ logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s'
 )
 
-# Set up TensorFlow model
+# Set up TensorFlow model (lazy loading to avoid blocking import)
 MODEL_URL = 'https://tfhub.dev/google/tf2-preview/mobilenet_v2/classification/4'
-MODEL = tf_keras.Sequential([hub.KerasLayer(MODEL_URL)])
+MODEL = None
+
+def get_model():
+    """Lazy load TensorFlow model on first use"""
+    global MODEL
+    if MODEL is None:
+        logging.info("Loading TensorFlow model (first time only)...")
+        MODEL = tf.keras.Sequential([hub.KerasLayer(MODEL_URL, trainable=False)])
+        logging.info("Model loaded successfully")
+    return MODEL
 
 def main():
     try:
@@ -137,7 +145,7 @@ def read_uploaded_file(uploaded_file):
         if not file_type:
             logging.error(f"Unsupported file type for file: {uploaded_file.name}")
             return None
-        logging.write(f"**Detected File Type:** {file_type}")
+        logging.info(f"Detected File Type: {file_type}")
 
         if file_type == 'CSV':
             df = read_csv_file(uploaded_file)
@@ -252,64 +260,68 @@ def process_images_and_embeddings(data):
         return
 
     total_records = len(data)
+    pinecone_batch = []
+    PINECONE_BATCH_SIZE = 100  # Batch upserts for performance
+    
     for idx, record in enumerate(data):
-        logging.info(f"Processing record {idx + 1} of {total_records}")
-        progress = (idx + 1) / total_records
-        logging.info(f"Progress: {progress:.2%}")
+        # Log progress every 10 records instead of every record
+        if idx % 10 == 0 or idx == total_records - 1:
+            progress = (idx + 1) / total_records
+            logging.info(f"Processing record {idx + 1}/{total_records} ({progress:.1%})")
 
         image_url = record.get('image_url')
         none_at_file = record.get('none_@file')
 
         if not image_url or not none_at_file:
-            logging.warning(f"Record missing 'image_url' or 'none_@file'. Skipping record: {record}")
+            logging.warning(f"Record missing 'image_url' or 'none_@file'. Skipping.")
             continue
 
         try:
-            # Generate embeddings
-            embeddings = extract_from_image_url(image_url)
-            if embeddings is None or len(embeddings) != 1001:
-                logging.warning(f"Failed to generate embeddings for image_url: {image_url}")
-                continue
-
-            # Upload embeddings to Pinecone
-            index.upsert([(none_at_file, embeddings.tolist())])
-            logging.info(f"Uploaded embeddings to Pinecone for id: {none_at_file}")
-
-            # Download image
+            # Download image once and reuse for both embedding and S3
             response = requests.get(image_url, stream=True, timeout=10)
             response.raise_for_status()
             image_data = response.content
 
+            # Generate embeddings from image data
+            embeddings = extract_from_image_data(image_data)
+            if embeddings is None:
+                logging.warning(f"Failed to generate embeddings for: {none_at_file}")
+                continue
+
+            # Batch Pinecone upserts
+            pinecone_batch.append((none_at_file, embeddings.tolist()))
+            if len(pinecone_batch) >= PINECONE_BATCH_SIZE:
+                index.upsert(pinecone_batch)
+                logging.info(f"Uploaded batch of {len(pinecone_batch)} embeddings to Pinecone")
+                pinecone_batch = []
+
             # Upload image to S3
             none_at_file_s3 = none_at_file.replace("\\", "/")
             s3.put_object(Bucket=BUCKET_NAME, Key=none_at_file_s3, Body=image_data)
-            logging.info(f"Uploaded image to S3 bucket '{BUCKET_NAME}' with key '{none_at_file_s3}'")
 
             # Add 's3_url' to record
             s3_url_prefix = f'https://{BUCKET_NAME}.s3.amazonaws.com/'
             record['s3_url'] = s3_url_prefix + none_at_file_s3
 
         except RequestException as e:
-            logging.error(f"Error downloading image from URL {image_url}: {e}")
+            logging.error(f"Error downloading image {image_url}: {e}")
             continue
         except Exception as e:
-            logging.error(f"Error processing record with none_@file: {none_at_file}: {e}")
+            logging.error(f"Error processing {none_at_file}: {e}")
             continue
+    
+    # Upload remaining batched embeddings
+    if pinecone_batch:
+        index.upsert(pinecone_batch)
+        logging.info(f"Uploaded final batch of {len(pinecone_batch)} embeddings to Pinecone")
 
     logging.info("Image processing completed.")
 
-def extract_from_image_url(url):
+def extract_from_image_data(image_data):
     """
-    Extracts image embeddings using TensorFlow Hub model.
+    Extracts image embeddings from raw image bytes using TensorFlow Hub model.
     """
     try:
-        logging.info(f"Processing image: {url}")
-
-        # Download image
-        response = requests.get(url, stream=True, timeout=10)
-        response.raise_for_status()
-        image_data = response.content
-
         # Open the image using PIL
         image = Image.open(BytesIO(image_data)).convert('RGB')
 
@@ -322,16 +334,17 @@ def extract_from_image_url(url):
         # Prepare the image for the model
         input_image = image_array[np.newaxis, ...]
 
-        # Get the feature vector for the image
-        embedding = MODEL.predict(input_image)
+        # Get the feature vector for the image (lazy load model)
+        model = get_model()
+        embedding = model.predict(input_image, verbose=0)  # verbose=0 to suppress TF output
 
         return embedding.flatten()
 
     except UnidentifiedImageError as e:
-        logging.error(f"UnidentifiedImageError for URL {url}: {e}")
+        logging.error(f"UnidentifiedImageError: {e}")
         return None
     except Exception as e:
-        logging.error(f"Error processing image at {url}: {e}")
+        logging.error(f"Error processing image: {e}")
         return None
 
 def upload_to_mongodb(data):
@@ -346,6 +359,7 @@ def upload_to_mongodb(data):
         logging.error("MongoDB credentials or database/collection name not set in environment variables.")
         return
 
+    client = None
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
@@ -385,8 +399,9 @@ def upload_to_mongodb(data):
         logging.error(f"Error inserting data into MongoDB: {e}")
 
     finally:
-        client.close()
-        logging.info("MongoDB connection closed.")
+        if client is not None:
+            client.close()
+            logging.info("MongoDB connection closed.")
 
 
 if __name__ == "__main__":
