@@ -15,7 +15,7 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 from io import BytesIO
 from urllib.parse import urlparse
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from requests.exceptions import RequestException
 from pinecone.grpc import PineconeGRPC as Pinecone
 
