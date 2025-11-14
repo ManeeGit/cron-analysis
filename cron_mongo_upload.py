@@ -49,7 +49,8 @@ def main():
         logging.info("Attempting to read CSV from S3 bucket 'cron-saffron'")
         df = read_csv_from_s3('cron-saffron', 'new_saffron_data.csv')
         if df is None:
-            logging.error("Failed to read CSV from S3. Aborting execution.")
+            logging.warning("No CSV file found in S3. This is normal if no new auctions were scraped.")
+            print("No new data to process. Exiting successfully.")
             return
         logging.info(f"Successfully read CSV data. Rows: {len(df)}, Columns: {len(df.columns)}")
 

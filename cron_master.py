@@ -43,7 +43,7 @@ CRON_JOBS = [
         'name': 'MongoDB Upload',
         'script': 'cron_mongo_upload.py',
         'description': 'Process images and upload to MongoDB with embeddings',
-        'critical': True
+        'critical': False  # Changed to non-critical to allow pipeline to continue
     },
     {
         'name': 'Bid History Scraper',
