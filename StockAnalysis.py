@@ -97,6 +97,10 @@ def fetch_stock_market_data(start_date, end_date):
             logging.error("No S&P 500 data retrieved")
             return None
         
+        # Flatten multi-level columns if present
+        if isinstance(sp500.columns, pd.MultiIndex):
+            sp500.columns = sp500.columns.get_level_values(0)
+        
         # Calculate returns for different periods
         sp500['sp500_return'] = sp500['Close'].pct_change() * 100
         sp500['sp500_pct_change_7day'] = sp500['Close'].pct_change(periods=7) * 100
