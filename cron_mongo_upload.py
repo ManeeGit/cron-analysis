@@ -28,6 +28,10 @@ logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s'
 )
 
+# Print to stdout immediately so cron_master sees we started
+print("MongoDB Upload script started - checking for data...")
+logging.info("Script initialized, checking for data in S3")
+
 # Set up TensorFlow model (lazy loading to avoid blocking import)
 MODEL_URL = 'https://tfhub.dev/google/tf2-preview/mobilenet_v2/classification/4'
 MODEL = None
@@ -43,6 +47,7 @@ def get_model():
 
 def main():
     try:
+        print("Checking S3 for new data...")
         logging.info("Starting main execution flow")
 
         # Read CSV from S3
@@ -51,6 +56,7 @@ def main():
         if df is None:
             logging.warning("No CSV file found in S3. This is normal if no new auctions were scraped.")
             print("No new data to process. Exiting successfully.")
+            sys.exit(0)  # Explicit exit with success code
             return
         logging.info(f"Successfully read CSV data. Rows: {len(df)}, Columns: {len(df.columns)}")
 

@@ -91,12 +91,12 @@ def run_python_script(script_name):
     try:
         logging.info(f"Executing: {script_name}")
         
-        # Run the script
+        # Run the script with shorter timeout for faster failure detection
         result = subprocess.run(
             [sys.executable, script_name],
             capture_output=True,
             text=True,
-            timeout=7200  # 2 hour timeout
+            timeout=300  # 5 minute timeout (was 2 hours)
         )
         
         # Log output
