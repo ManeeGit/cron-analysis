@@ -81,54 +81,188 @@ def upload_to_s3(file_path, bucket_name, object_name=None):
         return None
 
 
-def fetch_stock_market_data(start_date, end_date):
-    """Fetch S&P 500 historical data using yfinance"""
+def get_trading_dates_map(auction_dates, all_trading_dates):
+    """
+    Map auction dates to actual trading dates (minus 1, 2, 7, 14, 21, 30 trading days)
+    
+    Args:
+        auction_dates: Series of auction dates
+        all_trading_dates: List of all valid trading dates (sorted)
+    
+    Returns:
+        DataFrame with columns: auction_date, trading_date_minus_1, ..., trading_date_minus_30
+    """
+    logging.info("Mapping auction dates to trading dates...")
+    
+    trading_date_map = []
+    all_trading_dates_series = pd.Series(all_trading_dates)
+    
+    for auction_date in auction_dates:
+        # Find trading dates on or before auction date
+        valid_dates = all_trading_dates_series[all_trading_dates_series <= auction_date]
+        
+        if len(valid_dates) == 0:
+            continue
+        
+        # Get the indices for minus 1, 2, 7, 14, 21, 30 trading days
+        row = {'auction_date': auction_date}
+        
+        for days_back in [1, 2, 7, 14, 21, 30]:
+            idx = len(valid_dates) - days_back
+            if idx >= 0:
+                row[f'trading_date_minus_{days_back}'] = valid_dates.iloc[idx]
+            else:
+                row[f'trading_date_minus_{days_back}'] = None
+        
+        trading_date_map.append(row)
+    
+    result = pd.DataFrame(trading_date_map)
+    logging.info(f"✓ Mapped {len(result)} auction dates to trading dates")
+    return result
+
+
+def fetch_market_data_comprehensive(start_date, end_date):
+    """
+    Fetch comprehensive market data including:
+    - S&P 500 Large Cap (^GSPC)
+    - S&P 400 Mid Cap (^MID)  
+    - S&P 600 Small Cap (IJR as proxy)
+    - Vanguard Total Bond (BND as proxy for AGG)
+    """
     if not YFINANCE_AVAILABLE:
-        logging.error("yfinance not available. Cannot fetch stock market data.")
+        logging.error("yfinance not available. Cannot fetch market data.")
         return None
     
     try:
-        logging.info(f"Fetching S&P 500 data from {start_date} to {end_date}...")
+        logging.info(f"Fetching comprehensive market data from {start_date} to {end_date}...")
         
-        # Fetch S&P 500 data
-        sp500 = yf.download('^GSPC', start=start_date, end=end_date, progress=False)
+        # Define tickers
+        tickers = {
+            'sp500': '^GSPC',      # S&P 500 Large Cap
+            'sp400': '^MID',       # S&P 400 Mid Cap
+            'sp600': 'IJR',        # S&P 600 Small Cap (ETF proxy)
+            'bond': 'BND'          # Vanguard Total Bond Market (proxy for Bloomberg Agg)
+        }
         
-        if sp500.empty:
-            logging.error("No S&P 500 data retrieved")
+        market_data = {}
+        
+        for name, ticker in tickers.items():
+            logging.info(f"  Downloading {name} ({ticker})...")
+            data = yf.download(ticker, start=start_date, end=end_date, progress=False)
+            
+            if data.empty:
+                logging.warning(f"  No data retrieved for {name}")
+                continue
+            
+            # Flatten multi-level columns
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+            
+            # Store with date as regular column
+            data.reset_index(inplace=True)
+            data['Date'] = pd.to_datetime(data['Date']).dt.date
+            
+            market_data[name] = data[['Date', 'Close', 'Volume']].copy()
+            logging.info(f"  ✓ {name}: {len(data)} days")
+        
+        if not market_data:
+            logging.error("Failed to fetch any market data")
             return None
         
-        # Flatten multi-level columns if present
-        if isinstance(sp500.columns, pd.MultiIndex):
-            sp500.columns = sp500.columns.get_level_values(0)
-        
-        # Calculate returns for different periods
-        sp500['sp500_return'] = sp500['Close'].pct_change() * 100
-        sp500['sp500_pct_change_7day'] = sp500['Close'].pct_change(periods=7) * 100
-        sp500['sp500_pct_change_14day'] = sp500['Close'].pct_change(periods=14) * 100
-        sp500['sp500_pct_change_21day'] = sp500['Close'].pct_change(periods=21) * 100
-        sp500['sp500_pct_change_30day'] = sp500['Close'].pct_change(periods=30) * 100
-        
-        # Reset index to make date a column
-        sp500.reset_index(inplace=True)
-        sp500['Date'] = pd.to_datetime(sp500['Date']).dt.date
-        
-        # Keep only necessary columns
-        sp500 = sp500[[
-            'Date', 'Close', 'sp500_return',
-            'sp500_pct_change_7day', 'sp500_pct_change_14day',
-            'sp500_pct_change_21day', 'sp500_pct_change_30day'
-        ]].rename(columns={'Close': 'sp500_close'})
-        
-        logging.info(f"✓ Fetched {len(sp500)} days of S&P 500 data")
-        return sp500
+        logging.info(f"✓ Successfully fetched data for {len(market_data)} indices")
+        return market_data
         
     except Exception as e:
-        logging.error(f"Error fetching stock market data: {str(e)}")
+        logging.error(f"Error fetching market data: {str(e)}")
         return None
 
 
+def calculate_market_variables(df, market_data, trading_date_map):
+    """
+    Calculate all market percent change and volume variables based on trading dates
+    
+    Args:
+        df: DataFrame with auction data
+        market_data: Dict of market DataFrames (from fetch_market_data_comprehensive)
+        trading_date_map: DataFrame with trading date mappings
+    
+    Returns:
+        DataFrame with added market variables
+    """
+    logging.info("Calculating market variables...")
+    
+    # Merge trading date mappings
+    df = df.merge(trading_date_map, left_on='auction_date_only', right_on='auction_date', how='left')
+    
+    # Process each market index
+    for market_name, market_df in market_data.items():
+        logging.info(f"  Processing {market_name}...")
+        
+        # Create price/volume lookups by date
+        price_lookup = dict(zip(market_df['Date'], market_df['Close']))
+        volume_lookup = dict(zip(market_df['Date'], market_df['Volume']))
+        
+        # Map prices for minus_1 and minus_2
+        df[f'{market_name}_price_minus_1'] = df['trading_date_minus_1'].map(price_lookup)
+        df[f'{market_name}_price_minus_2'] = df['trading_date_minus_2'].map(price_lookup)
+        df[f'{market_name}_volume_minus_1'] = df['trading_date_minus_1'].map(volume_lookup)
+        
+        # Calculate 1-day and 2-day percent changes
+        df[f'{market_name}_pct_change_1day'] = ((df[f'{market_name}_price_minus_1'] / df[f'{market_name}_price_minus_2']) - 1) * 100
+        
+        # For 2-day change, need minus_3 trading date (not in map, so calculate differently)
+        # 2-day change is from minus_2 to current (minus_1 is "current" for auction day)
+        price_minus_1 = df['trading_date_minus_1'].map(price_lookup)
+        price_minus_2 = df['trading_date_minus_2'].map(price_lookup)
+        df[f'{market_name}_pct_change_2day'] = ((price_minus_1 / price_minus_2) - 1) * 100
+        
+        # Calculate longer period changes (7, 14, 21, 30 days)
+        for days in [7, 14, 21, 30]:
+            price_current = df['trading_date_minus_1'].map(price_lookup)
+            price_back = df[f'trading_date_minus_{days}'].map(price_lookup)
+            df[f'{market_name}_pct_change_{days}day'] = ((price_current / price_back) - 1) * 100
+            
+            # Volume changes
+            volume_current = df['trading_date_minus_1'].map(volume_lookup)
+            volume_back = df[f'trading_date_minus_{days}'].map(volume_lookup)
+            df[f'{market_name}_volume_change_{days}day'] = ((volume_current / volume_back) - 1) * 100
+    
+    # Rename to match expected column names
+    rename_map = {
+        'sp500_price_minus_1': 'sp500_large_cap_price_minus_1',
+        'sp500_price_minus_2': 'sp500_large_cap_price_minus_2',
+        'sp500_volume_minus_1': 'sp500_large_cap_volume_minus_1',
+        'sp500_pct_change_1day': 'sp500_large_cap_pct_change_1day',
+        'sp500_pct_change_2day': 'sp500_large_cap_pct_change_2day',
+        'sp400_price_minus_1': 'sp400_mid_cap_price_minus_1',
+        'sp400_price_minus_2': 'sp400_mid_cap_price_minus_2',
+        'sp400_volume_minus_1': 'sp400_mid_cap_volume_minus_1',
+        'sp400_pct_change_1day': 'sp400_mid_cap_pct_change_1day',
+        'sp400_pct_change_2day': 'sp400_mid_cap_pct_change_2day',
+        'sp600_price_minus_1': 'sp600_small_cap_price_minus_1',
+        'sp600_price_minus_2': 'sp600_small_cap_price_minus_2',
+        'sp600_volume_minus_1': 'sp600_small_cap_volume_minus_1',
+        'sp600_pct_change_1day': 'sp600_small_cap_pct_change_1day',
+        'sp600_pct_change_2day': 'sp600_small_cap_pct_change_2day',
+        'bond_price_minus_1': 'vanguard_bond_price_minus_1',
+        'bond_price_minus_2': 'vanguard_bond_price_minus_2',
+        'bond_volume_minus_1': 'vanguard_bond_volume_minus_1',
+        'bond_pct_change_1day': 'vanguard_bond_pct_change_1day',
+        'bond_pct_change_2day': 'vanguard_bond_pct_change_2day',
+    }
+    
+    df.rename(columns=rename_map, inplace=True)
+    
+    # Add trading_volume_minus_1 (use S&P 500 volume as proxy)
+    if 'sp500_large_cap_volume_minus_1' in df.columns:
+        df['trading_volume_minus_1'] = df['sp500_large_cap_volume_minus_1']
+    
+    logging.info("✓ Market variables calculated")
+    return df
+
+
 def fetch_bid_data_from_mongodb():
-    """Fetch bid data from MongoDB collection and merge with stock market data"""
+    """Fetch bid data from MongoDB and add comprehensive market data"""
     try:
         logging.info("Connecting to MongoDB...")
         client = MongoClient(MONGO_URI)
@@ -164,39 +298,48 @@ def fetch_bid_data_from_mongodb():
             logging.error("No winning_bid column found")
             return None, None
         
-        # Fetch stock market data
+        # Fetch comprehensive market data
         if len(df) > 0:
             min_date = df['auction_date_only'].min()
             max_date = df['auction_date_only'].max()
             
-            # Add buffer to dates for rolling calculations
-            start_date = min_date - timedelta(days=60)
+            # Add buffer for rolling calculations
+            start_date = min_date - timedelta(days=90)
             end_date = max_date + timedelta(days=1)
             
-            stock_data = fetch_stock_market_data(start_date, end_date)
+            # Fetch all market indices
+            market_data = fetch_market_data_comprehensive(start_date, end_date)
             
-            if stock_data is not None:
-                # Merge stock data with auction data
-                logging.info("Merging stock market data with auction data...")
-                df = df.merge(stock_data, left_on='auction_date_only', right_on='Date', how='left')
-                logging.info(f"✓ Merged stock market data")
-                
-                # Check merge success
-                merged_count = df['sp500_close'].notna().sum()
-                logging.info(f"✓ {merged_count} records matched with stock data ({merged_count/len(df)*100:.1f}%)")
+            if market_data is not None:
+                # Get all trading dates (use S&P 500 as reference)
+                if 'sp500' in market_data:
+                    all_trading_dates = sorted(market_data['sp500']['Date'].tolist())
+                    
+                    # Create trading date mappings
+                    unique_auction_dates = df['auction_date_only'].dropna().unique()
+                    trading_date_map = get_trading_dates_map(unique_auction_dates, all_trading_dates)
+                    
+                    # Calculate all market variables
+                    df = calculate_market_variables(df, market_data, trading_date_map)
+                    
+                    # Check merge success
+                    merged_count = df['sp500_large_cap_price_minus_1'].notna().sum()
+                    logging.info(f"✓ {merged_count} records with market data ({merged_count/len(df)*100:.1f}%)")
+                else:
+                    logging.warning("S&P 500 data not available")
             else:
-                logging.warning("Stock market data not available. Analysis will be limited.")
+                logging.warning("Market data not available. Analysis will be limited.")
         
-        # Save raw data locally for analysis
+        # Save complete data locally
         raw_data_path = os.path.join(OUTPUT_DIR, 'bid_data_complete_all_periods.csv')
         df.to_csv(raw_data_path, index=False)
-        logging.info(f"Saved raw data to {raw_data_path}")
+        logging.info(f"Saved complete data to {raw_data_path}")
         
         client.close()
         return df, raw_data_path
         
     except Exception as e:
-        logging.error(f"Error fetching data from MongoDB: {str(e)}")
+        logging.error(f"Error fetching data from MongoDB: {str(e)}", exc_info=True)
         return None, None
 
 
@@ -231,6 +374,11 @@ def run_stock_impact_analysis(df):
             'sp400_mid_cap_pct_change_2day',
             'sp600_small_cap_pct_change_2day',
             'vanguard_bond_pct_change_2day',
+            'trading_volume_minus_1',
+            'sp500_volume_change_7day',
+            'sp500_volume_change_14day',
+            'sp500_volume_change_21day',
+            'sp500_volume_change_30day'
         ]
         
         correlations = []
