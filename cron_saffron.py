@@ -162,7 +162,11 @@ def send_email(csv_path=None, has_data=False, error_msg=None):
     msg.attach(MIMEText(body, 'plain'))
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        if not all([SMTP_SERVER, SMTP_PORT, EMAIL_USER, EMAIL_PASSWORD, RECIPIENT_EMAIL]):
+            logging.error("Email credentials not configured. Skipping email.")
+            return
+        
+        with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT)) as server:
             server.starttls()
             server.login(EMAIL_USER, EMAIL_PASSWORD)
             server.send_message(msg)

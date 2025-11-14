@@ -1,7 +1,6 @@
 import os
 import smtplib
 import logging
-import logging
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -74,7 +73,7 @@ def send_links_to_subscribers():
 
         # SMTP connection
         try:
-            with smtplib.SMTP(os.getenv("SMTP_SERVER"), os.getenv("SMTP_PORT")) as server:
+            with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT", 587))) as server:
                 server.starttls()
                 server.login(os.getenv("EMAIL_USER"), os.getenv("EMAIL_PASSWORD"))
 

@@ -9,10 +9,12 @@ pymongo
 
 # AWS
 boto3
+botocore
 
 # Web scraping
 requests
 beautifulsoup4
+lxml
 selenium
 webdriver-manager
 chromedriver-autoinstaller
@@ -21,11 +23,15 @@ chromedriver-autoinstaller
 tensorflow
 tensorflow-hub
 pillow
-pinecone
+pinecone-client
 
 # Utilities
 python-dotenv
+python-dateutil
 yfinance
 chardet
 googleapis-common-protos
 grpcio-tools
+tenacity
+matplotlib
+seaborn

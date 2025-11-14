@@ -10,6 +10,7 @@ load_dotenv()
 
 def download_similarities_data():
     logging.info("Starting data download...")
+    os.makedirs("./files", exist_ok=True)
     client = MongoClient(os.getenv("MONGO_URI"))
     db = client[os.getenv("DB_NAME")]
     collection = db[os.getenv("COLLECTION_NAME")]
@@ -21,6 +22,7 @@ def download_similarities_data():
 
 def download_bid_data():
     logging.info("Starting bid data download...")
+    os.makedirs("./files", exist_ok=True)
     client = MongoClient(os.getenv("MONGO_URI"))
     db = client[os.getenv("DB_NAME")]
     collection = db[os.getenv("SAFFRON_BID_COLLECTION_NAME")]
@@ -71,11 +73,10 @@ def download_transformed_data():
         transformed_rows = []
         total_rows = len(df)
         if total_rows == 0:
-            progress_bar.progress(100)
+            logging.warning("No data to transform")
             return
 
-        # We'll update progress within the loop
-        logging.info("Transforming data...")
+        logging.info(f"Transforming {total_rows} rows...")
         for i, (_, row) in enumerate(df.iterrows(), 1):
             lot_data = {col: row[col] for col in constant_columns}
             bid_index = 1

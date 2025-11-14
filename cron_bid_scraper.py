@@ -276,10 +276,8 @@ def bid_main():
 
     try:
         logging.warning("Fetching documents from MongoDB. This may take a while...")
-        documents = art_collection.find(query)
-        total_documents = documents.count() if hasattr(documents, 'count') else len(list(documents))
+        total_documents = art_collection.count_documents(query)
         logging.info(f"Found {total_documents} new documents to process.")
-        # Reset cursor after counting
         documents = art_collection.find(query)
     except Exception as e:
         logging.error(f"Error fetching documents from MongoDB: {e}")
