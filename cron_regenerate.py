@@ -121,7 +121,7 @@ def build_hashmaps(documents):
     logging.info("Hashmaps built successfully")
     return image_id_to_winning_bid, image_id_to_date, image_id_to_auction_house
 
-def query_pinecone(index: Pinecone, image_id: str, top_k: int = 30) -> List[Dict]:
+def query_pinecone(index, image_id: str, top_k: int = 30) -> List[Dict]:
     """Query Pinecone vector database for similar images"""
     if not image_id or pd.isna(image_id):
         return []

@@ -268,8 +268,16 @@ def fetch_bid_data_from_mongodb():
         db = client[DB_NAME]
         collection = db[SAFFRON_BID_COLLECTION_NAME]
         
-        logging.info("Fetching bid data...")
-        cursor = collection.find({})
+        # Check document count first
+        doc_count = collection.count_documents({})
+        logging.info(f"Found {doc_count} bid documents")
+        
+        if doc_count == 0:
+            logging.warning("No bid data found in MongoDB")
+            return None, None
+        
+        logging.info("Fetching bid data (limited to 10000 records to avoid memory issues)...")
+        cursor = collection.find({}).limit(10000)
         df = pd.DataFrame(list(cursor))
         
         logging.info(f"Fetched {len(df)} records from MongoDB")
