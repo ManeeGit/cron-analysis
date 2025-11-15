@@ -281,9 +281,24 @@ def fetch_bid_data_from_mongodb():
             logging.warning("No bid data found in MongoDB")
             return None, None
         
-        # Reduced to 5K records and only fetch necessary fields to reduce memory
+        # Fetch all relevant fields for comprehensive analysis
         logging.info("Fetching bid data (limited to 5000 recent records to avoid memory issues)...")
-        projection = {'winning_bid': 1, 'iso_date': 1, 'auction_date': 1, 'artist': 1, 'lot_title': 1, '_id': 1}
+        projection = {
+            'winning_bid': 1, 
+            'iso_date': 1, 
+            'auction_date': 1, 
+            'artist': 1, 
+            'lot_title': 1,
+            'lo_est': 1,
+            'hi_est': 1,
+            'medium': 1,
+            'year': 1,
+            'dimensions': 1,
+            'auction_house': 1,
+            'category': 1,
+            'subcategory': 1,
+            '_id': 1
+        }
         cursor = collection.find({}, projection).sort('_id', -1).limit(5000)
         df = pd.DataFrame(list(cursor))
         
