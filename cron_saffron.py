@@ -54,8 +54,11 @@ COLLECTION_NAME = 'art_collection'
 # Email configuration
 SMTP_SERVER = os.getenv('SMTP_SERVER')
 SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
+# For AWS SES, EMAIL_USER is the SMTP username (AWS Access Key)
 EMAIL_USER = os.getenv('EMAIL_USER')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
+# EMAIL_FROM is the actual email address to send from
+EMAIL_FROM = os.getenv('EMAIL_FROM', 'insights@mdass.com')
 RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
 
 def main():
@@ -136,7 +139,7 @@ def upload_to_s3(file_path, bucket_name="cron-saffron", object_name="new_saffron
 def send_email(csv_path=None, has_data=False, error_msg=None):
     """Send email with CSV attachment or status message"""
     msg = MIMEMultipart()
-    msg['From'] = EMAIL_USER
+    msg['From'] = EMAIL_FROM
     msg['To'] = RECIPIENT_EMAIL
 
     if error_msg:
@@ -178,7 +181,7 @@ def send_error_email(error_msg):
     """Send error notification email"""
     try:
         msg = MIMEMultipart()
-        msg['From'] = EMAIL_USER
+        msg['From'] = EMAIL_FROM
         msg['To'] = RECIPIENT_EMAIL
         msg['Subject'] = "Saffron Scraper Error Alert"
         body = f"The scraping process encountered an error:\n\n{error_msg}"
