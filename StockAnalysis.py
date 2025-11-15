@@ -28,8 +28,13 @@ warnings.filterwarnings('ignore')
 # Print immediately to show startup
 print("Stock Analysis starting...")
 
-# Defer yfinance import until needed
-YFINANCE_AVAILABLE = None
+# Check if yfinance is available
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
+    logging.warning("yfinance not installed. Stock market data fetching will be limited.")
 
 # Load environment variables
 load_dotenv()
