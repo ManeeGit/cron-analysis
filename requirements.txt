@@ -23,7 +23,7 @@ chromedriver-autoinstaller
 tensorflow
 tensorflow-hub
 pillow
-pinecone-client
+pinecone
 
 # Utilities
 python-dotenv

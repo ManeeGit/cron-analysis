@@ -307,19 +307,8 @@ def fetch_bid_data_from_mongodb():
             logging.error("No winning_bid column found")
             return None, None
         
-        # Save raw data without market analysis to avoid OOM on small instances
-        logging.info("Skipping market data fetch to conserve memory on this run")
-        
-        # Save basic bid data
-        os.makedirs('analysis', exist_ok=True)
-        raw_file = 'analysis/bid_data_complete_all_periods.csv'
-        df.to_csv(raw_file, index=False)
-        logging.info(f"Saved raw bid data: {raw_file}")
-        
-        return df, raw_file
-        
-        # DISABLED: Fetch comprehensive market data (requires too much memory)
-        if False and len(df) > 0:
+        # Fetch comprehensive market data
+        if len(df) > 0:
             min_date = df['auction_date_only'].min()
             max_date = df['auction_date_only'].max()
             
