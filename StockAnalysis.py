@@ -802,10 +802,11 @@ def main():
         # Upload hedonic pricing results
         if hedonic_results:
             for key, file_path in hedonic_results.items():
-                filename = os.path.basename(file_path)
-                url = upload_to_s3(file_path, S3_BUCKET, f'analysis/{filename}')
-                if url:
-                    s3_links[key] = url
+                if file_path:  # Only process if file was created
+                    filename = os.path.basename(file_path)
+                    url = upload_to_s3(file_path, S3_BUCKET, f'analysis/{filename}')
+                    if url:
+                        s3_links[key] = url
         
         # Step 5: Create summary with download links
         logging.info("="*90)
