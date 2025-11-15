@@ -28,7 +28,7 @@ pinecone
 # Utilities
 python-dotenv
 python-dateutil
-yfinance
+yfinance>=0.2.0
 chardet
 googleapis-common-protos
 grpcio-tools

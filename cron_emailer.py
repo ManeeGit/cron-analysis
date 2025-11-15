@@ -64,7 +64,7 @@ def send_links_to_subscribers():
 
         # Create base email message
         base_msg = MIMEMultipart()
-        base_msg['From'] = os.getenv("EMAIL_USER")
+        base_msg['From'] = os.getenv("EMAIL_FROM", "insights@mdass.com")
         base_msg['Subject'] = f"Latest Links - {datetime.now().strftime('%Y-%m-%d')}"
 
         # Email body
@@ -84,7 +84,7 @@ def send_links_to_subscribers():
                         msg['To'] = email
 
                         server.sendmail(
-                            os.getenv("EMAIL_USER"),
+                            os.getenv("EMAIL_FROM", "insights@mdass.com"),
                             email,
                             msg.as_string()
                         )
