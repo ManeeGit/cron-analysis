@@ -827,8 +827,6 @@ def main():
             {'File_Type': 'Stock Impact Summary', 'Download_URL': s3_links.get('summary_file', 'N/A')},
             {'File_Type': 'Regression Results (TXT)', 'Download_URL': s3_links.get('regression_file', 'N/A')},
             {'File_Type': 'Hedonic Model Comparison', 'Download_URL': s3_links.get('comparison_file', 'N/A')},
-            {'File_Type': 'Hedonic Implicit Prices', 'Download_URL': s3_links.get('hedonic_file', 'N/A')},
-            {'File_Type': 'Artist Effects', 'Download_URL': s3_links.get('artist_file', 'N/A')},
             {'File_Type': 'Hedonic Detailed Results (TXT)', 'Download_URL': s3_links.get('detailed_file', 'N/A')},
         ])
         
