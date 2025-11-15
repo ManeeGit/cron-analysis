@@ -497,6 +497,12 @@ def run_hedonic_pricing_analysis(df):
     results = {}
     
     try:
+        # Check if required columns exist
+        if 'lo_est' not in df.columns or 'hi_est' not in df.columns:
+            logging.warning("Missing lo_est/hi_est columns. Hedonic pricing analysis requires estimate data.")
+            logging.warning("Skipping hedonic pricing analysis.")
+            return None
+        
         # Prepare data
         df['log_bid'] = np.log(df['bid_usd'].replace(0, np.nan))
         df = df[np.isfinite(df['log_bid'])].copy()
