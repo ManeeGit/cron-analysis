@@ -6,9 +6,9 @@ import chardet
 import logging
 import requests
 import boto3
-import pinecone
-import tensorflow as tf
-import tensorflow_hub as hub
+# Defer TensorFlow imports until needed to avoid blocking startup
+# import tensorflow as tf
+# import tensorflow_hub as hub
 from PIL import Image, UnidentifiedImageError
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -16,7 +16,9 @@ from io import BytesIO
 from urllib.parse import urlparse
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from requests.exceptions import RequestException
-from pinecone.grpc import PineconeGRPC as Pinecone
+
+# Defer pinecone import as well
+# from pinecone.grpc import PineconeGRPC as Pinecone
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,9 +34,10 @@ logging.basicConfig(
 print("MongoDB Upload script started - checking for data...")
 logging.info("Script initialized, checking for data in S3")
 
-# Set up TensorFlow model (lazy loading to avoid blocking import)
+# Set up TensorFlow model (lazy loading - both import and model creation deferred)
 MODEL_URL = 'https://tfhub.dev/google/tf2-preview/mobilenet_v2/classification/4'
 MODEL = None
+TF_IMPORTED = False
 
 def get_model():
     """Lazy load TensorFlow model on first use"""
