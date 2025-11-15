@@ -17,20 +17,19 @@ import logging
 import boto3
 from pymongo import MongoClient
 from dotenv import load_dotenv
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from scipy import stats
+# Defer heavy statistical imports until needed
+# import statsmodels.api as sm
+# import statsmodels.formula.api as smf
+# from scipy import stats
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-# Try to import yfinance for stock data
-try:
-    import yfinance as yf
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
-    logging.warning("yfinance not installed. Stock market data fetching will be limited.")
+# Print immediately to show startup
+print("Stock Analysis starting...")
+
+# Defer yfinance import until needed
+YFINANCE_AVAILABLE = None
 
 # Load environment variables
 load_dotenv()
@@ -713,6 +712,7 @@ def run_hedonic_pricing_analysis(df):
 def main():
     """Main execution function"""
     try:
+        print("Checking for bid data...")
         logging.info("="*90)
         logging.info("STARTING STOCK MARKET ANALYSIS PIPELINE")
         logging.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -720,9 +720,17 @@ def main():
         
         # Step 1: Fetch data from MongoDB
         df, raw_data_path = fetch_bid_data_from_mongodb()
-        if df is None:
-            logging.error("Failed to fetch data from MongoDB. Aborting.")
+        if df is None or len(df) == 0:
+            logging.warning("No bid data available for analysis. Exiting.")
+            print("No data to analyze. Exiting successfully.")
             return
+        
+        # Import heavy modules only if we have data to process
+        print("Loading statistical modules...")
+        global sm, smf, stats
+        import statsmodels.api as sm
+        import statsmodels.formula.api as smf
+        from scipy import stats
         
         # Step 2: Run Stock Impact Analysis
         stock_results = run_stock_impact_analysis(df)

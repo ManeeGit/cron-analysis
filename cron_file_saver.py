@@ -6,6 +6,9 @@ import os
 import logging
 import boto3
 
+# Print immediately to show startup
+print("File Saver starting...")
+
 load_dotenv()
 
 def download_similarities_data():
@@ -143,4 +146,13 @@ def download_data():
 
 
 if __name__ == "__main__":
+    print("Starting data export and upload...")
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('file_saver.log'),
+            logging.StreamHandler()
+        ]
+    )
     download_data()

@@ -2,15 +2,19 @@
 import pandas as pd
 import pymongo
 import dateutil.parser
-import pinecone
+# Defer heavy imports until needed
+# import pinecone
 from datetime import datetime
 import os
 import tempfile
 import dotenv
-from pinecone.grpc import PineconeGRPC as Pinecone
+# from pinecone.grpc import PineconeGRPC as Pinecone
 import logging
 from typing import Dict, List, Optional, Tuple
 from pymongo.errors import BulkWriteError
+
+# Print immediately to show startup
+print("Match Regenerator starting...")
 
 # --------------------- Configuration ---------------------
 # Load environment variables from .env file
@@ -57,6 +61,8 @@ def validate_environment():
 def initialize_pinecone(api_key: str, index_name: str):
     """Initialize Pinecone connection and return index handle"""
     try:
+        print("Connecting to Pinecone...")
+        from pinecone.grpc import PineconeGRPC as Pinecone
         pc = Pinecone(api_key=api_key)
         index = pc.Index(index_name)
         logging.info(f"Connected to Pinecone index '{index_name}'")
@@ -249,17 +255,22 @@ def update_mongodb(collection, documents) -> None:
 
 def regenerate_matches():
     """Main workflow controller"""
+    print("Checking for documents to process...")
     logging.info("Starting match regeneration process")
 
     try:
         validate_environment()
-        pinecone_index = initialize_pinecone(PINECONE_API_KEY, INDEX_NAME)
+        # Connect to MongoDB first to check if there's work to do
         collection = connect_mongodb(MONGO_URI, DATABASE_NAME, COLLECTION_NAME)
         documents = fetch_documents(collection)
 
         if not documents:
             logging.warning("No documents found with 'none_@file' field")
+            print("No documents need regeneration. Exiting.")
             return
+        
+        # Only initialize Pinecone if we have documents to process
+        pinecone_index = initialize_pinecone(PINECONE_API_KEY, INDEX_NAME)
 
         hashmaps = build_hashmaps(documents)
         updated_docs = []
