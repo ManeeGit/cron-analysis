@@ -88,8 +88,9 @@ def fetch_documents(collection):
     try:
         query = {"none_@file": {"$exists": True, "$ne": None}}
         projection = {"none_@file": 1, "winning_bid": 1, "iso_date": 1, "auction_house": 1}
-        documents = list(collection.find(query, projection))
-        logging.info(f"Fetched {len(documents)} documents from MongoDB")
+        # Limit to 100 documents per run to avoid timeout (can run multiple times)
+        documents = list(collection.find(query, projection).limit(100))
+        logging.info(f"Fetched {len(documents)} documents from MongoDB (limited to 100 per run)")
         return documents
     except Exception as e:
         logging.error(f"Document fetch error: {str(e)}")
