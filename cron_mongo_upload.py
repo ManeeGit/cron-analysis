@@ -40,12 +40,25 @@ MODEL = None
 TF_IMPORTED = False
 
 def get_model():
-    """Lazy load TensorFlow model on first use"""
-    global MODEL
+    """Lazy load TensorFlow imports and model on first use."""
+    global MODEL, TF_IMPORTED
+    
+    # Import TensorFlow only when needed
+    if not TF_IMPORTED:
+        logging.info("Importing TensorFlow modules (first use)...")
+        print("Loading TensorFlow for image processing...")
+        import tensorflow as tf
+        import tensorflow_hub as hub
+        # Make them available globally
+        globals()['tf'] = tf
+        globals()['hub'] = hub
+        TF_IMPORTED = True
+        logging.info("TensorFlow modules imported successfully")
+    
     if MODEL is None:
-        logging.info("Loading TensorFlow model (first time only)...")
-        MODEL = tf.keras.Sequential([hub.KerasLayer(MODEL_URL, trainable=False)])
-        logging.info("Model loaded successfully")
+        logging.info("Loading TensorFlow model from hub")
+        MODEL = globals()['tf'].keras.Sequential([globals()['hub'].KerasLayer(MODEL_URL, trainable=False)])
+        logging.info("TensorFlow model loaded successfully")
     return MODEL
 
 def main():
@@ -259,7 +272,8 @@ def process_images_and_embeddings(data):
         logging.error(f"AWS credentials error: {e}")
         return
 
-    # Initialize Pinecone
+    # Initialize Pinecone (import when needed)
+    from pinecone.grpc import PineconeGRPC as Pinecone
     pc=Pinecone(api_key=PINECONE_API_KEY)
     try:
 
