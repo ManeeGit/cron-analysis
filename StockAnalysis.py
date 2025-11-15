@@ -567,8 +567,9 @@ def run_hedonic_pricing_analysis(df):
         # MODEL 2: With Artist Fixed Effects
         if 'artist' in df.columns:
             artist_counts = df['artist'].value_counts()
-            top_artists = artist_counts[artist_counts >= 10].index.tolist()  # Lowered from 50 to 10
-            logging.info(f"Including {len(top_artists)} artists with ≥10 observations")
+            logging.info(f"Artist distribution: {len(artist_counts)} unique artists, max={artist_counts.max()}, min={artist_counts.min()}")
+            top_artists = artist_counts[artist_counts >= 3].index.tolist()  # Lowered to 3 for better coverage
+            logging.info(f"Including {len(top_artists)} artists with ≥3 observations (total rows: {df[df['artist'].isin(top_artists)].shape[0]})")
             
             df_model2 = df[df['artist'].isin(top_artists)].copy()
             
@@ -579,12 +580,18 @@ def run_hedonic_pricing_analysis(df):
                     'sp500_pct_change_14day'
                 ]].dropna()
                 
-                formula2 = 'log_bid ~ sp500_pct_change_7day + sp500_pct_change_14day + C(artist)'
-                model2 = smf.ols(formula2, data=model2_data).fit()
-                logging.info(f"Model 2 R-squared: {model2.rsquared:.6f}")
+                logging.info(f"Model 2 data: {len(model2_data)} rows after dropna, {model2_data['artist'].nunique()} unique artists")
+                
+                if len(model2_data) > 50 and model2_data['artist'].nunique() >= 2:
+                    formula2 = 'log_bid ~ sp500_pct_change_7day + sp500_pct_change_14day + C(artist)'
+                    model2 = smf.ols(formula2, data=model2_data).fit()
+                    logging.info(f"Model 2 R-squared: {model2.rsquared:.6f}")
+                else:
+                    model2 = None
+                    logging.warning(f"Insufficient data for Model 2: {len(model2_data)} rows, {model2_data['artist'].nunique()} artists")
             else:
                 model2 = None
-                logging.warning("Insufficient data for Model 2")
+                logging.warning(f"Model 2 skipped: has_market_data={has_market_data}, df_model2 rows={len(df_model2)}")
         else:
             model2 = None
             df_model2 = df.copy()
