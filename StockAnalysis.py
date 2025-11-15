@@ -565,21 +565,21 @@ def run_hedonic_pricing_analysis(df):
             model1 = None
         
         # MODEL 2: With Artist Fixed Effects
-        if 'artist_name' in df.columns:
-            artist_counts = df['artist_name'].value_counts()
-            top_artists = artist_counts[artist_counts >= 50].index.tolist()
-            logging.info(f"Including {len(top_artists)} artists with ≥50 observations")
+        if 'artist' in df.columns:
+            artist_counts = df['artist'].value_counts()
+            top_artists = artist_counts[artist_counts >= 10].index.tolist()  # Lowered from 50 to 10
+            logging.info(f"Including {len(top_artists)} artists with ≥10 observations")
             
-            df_model2 = df[df['artist_name'].isin(top_artists)].copy()
+            df_model2 = df[df['artist'].isin(top_artists)].copy()
             
             if has_market_data and len(df_model2) > 100:
                 model2_data = df_model2[[
-                    'log_bid', 'artist_name',
+                    'log_bid', 'artist',
                     'sp500_pct_change_7day',
                     'sp500_pct_change_14day'
                 ]].dropna()
                 
-                formula2 = 'log_bid ~ sp500_pct_change_7day + sp500_pct_change_14day + C(artist_name)'
+                formula2 = 'log_bid ~ sp500_pct_change_7day + sp500_pct_change_14day + C(artist)'
                 model2 = smf.ols(formula2, data=model2_data).fit()
                 logging.info(f"Model 2 R-squared: {model2.rsquared:.6f}")
             else:
@@ -590,9 +590,9 @@ def run_hedonic_pricing_analysis(df):
             df_model2 = df.copy()
         
         # MODEL 3: Multiple Time Periods
-        if has_market_data and 'artist_name' in df_model2.columns and 'year' in df_model2.columns:
+        if has_market_data and 'artist' in df_model2.columns and 'year' in df_model2.columns:
             model3_data = df_model2[[
-                'log_bid', 'artist_name', 'year',
+                'log_bid', 'artist', 'year',
                 'sp500_pct_change_7day',
                 'sp500_pct_change_14day',
                 'sp500_pct_change_21day',
@@ -604,7 +604,7 @@ def run_hedonic_pricing_analysis(df):
                                         sp500_pct_change_14day + 
                                         sp500_pct_change_21day + 
                                         sp500_pct_change_30day +
-                                        C(artist_name) +
+                                        C(artist) +
                                         C(year)'''
                 
                 model3 = smf.ols(formula3, data=model3_data).fit()
@@ -616,9 +616,9 @@ def run_hedonic_pricing_analysis(df):
             model3 = None
         
         # MODEL 4: With Estimate Controls
-        if has_market_data and 'artist_name' in df_model2.columns:
+        if has_market_data and 'artist' in df_model2.columns:
             model4_data = df_model2[[
-                'log_bid', 'artist_name', 'log_estimate_midpoint',
+                'log_bid', 'artist', 'log_estimate_midpoint',
                 'sp500_pct_change_7day',
                 'sp500_pct_change_14day'
             ]].dropna()
@@ -627,7 +627,7 @@ def run_hedonic_pricing_analysis(df):
                 formula4 = '''log_bid ~ sp500_pct_change_7day + 
                                         sp500_pct_change_14day +
                                         log_estimate_midpoint +
-                                        C(artist_name)'''
+                                        C(artist)'''
                 
                 model4 = smf.ols(formula4, data=model4_data).fit()
                 logging.info(f"Model 4 R-squared: {model4.rsquared:.6f}")
@@ -691,8 +691,8 @@ def run_hedonic_pricing_analysis(df):
         if model2 is not None:
             artist_effects = []
             for param in model2.params.index:
-                if 'C(artist_name)' in param:
-                    artist = param.replace('C(artist_name)[T.', '').replace(']', '')
+                if 'C(artist)' in param:
+                    artist = param.replace('C(artist)[T.', '').replace(']', '')
                     effect = model2.params[param]
                     premium_pct = (np.exp(effect) - 1) * 100
                     artist_effects.append({
